@@ -1,0 +1,72 @@
+name: Build XStreaming iOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+
+    steps:
+      - name: Check out latest upstream iOS source
+        uses: actions/checkout@v7
+        with:
+          repository: Geocld/XStreaming
+          ref: refs/heads/ios
+          persist-credentials: false
+
+      - name: Install dependencies and bundle JavaScript
+        id: source
+        shell: bash
+        run: |
+          revision=$(git rev-parse HEAD)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "Upstream: https://github.com/Geocld/XStreaming/commit/$revision" >> "$GITHUB_STEP_SUMMARY"
+          npm ci --ignore-scripts
+          git apply --exclude='*/android/*' --exclude='*/.DS_Store' patches/*.patch
+          npm run bundle:ios
+          cd ios
+          pod install
+
+      - name: Build unsigned device app
+        run: |
+          xcodebuild \
+            -workspace ios/XStreaming.xcworkspace \
+            -scheme XStreaming \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/xstreaming-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package and verify IPA
+        shell: bash
+        run: |
+          app="$RUNNER_TEMP/xstreaming-build/Build/Products/Release-iphoneos/XStreaming.app"
+          test -s "$app/main.jsbundle"
+          test -s "$app/index.html"
+          xcrun lipo -verify_arch arm64 "$app/XStreaming"
+          if codesign -d "$app" 2>/dev/null; then
+            echo 'Expected an unsigned app'
+            exit 1
+          fi
+          ditto ios/bundle/assets "$app/assets"
+          mkdir Payload
+          ditto "$app" Payload/XStreaming.app
+          ditto -c -k --keepParent Payload XStreaming-unsigned.ipa
+          unzip -tq XStreaming-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: XStreaming-iOS-unsigned-${{ steps.source.outputs.revision }}
+          path: XStreaming-unsigned.ipa
+          if-no-files-found: error
