@@ -30,7 +30,7 @@ jobs:
           revision=$(git rev-parse HEAD)
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           echo "Upstream: https://github.com/Geocld/XStreaming/commit/$revision" >> "$GITHUB_STEP_SUMMARY"
-          npm ci --ignore-scripts
+          npm ci --legacy-peer-deps --ignore-scripts
           git apply --exclude='*/android/*' --exclude='*/.DS_Store' patches/*.patch
           npm run bundle:ios
           cd ios
