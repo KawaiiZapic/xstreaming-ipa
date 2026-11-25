@@ -36,6 +36,12 @@ jobs:
           cd ios
           pod install
 
+      - name: Install iOS 18.2 runtime for Interface Builder
+        run: |
+          if ! xcrun simctl list runtimes available | grep -q 'com.apple.CoreSimulator.SimRuntime.iOS-18-2$'; then
+            xcodebuild -downloadPlatform iOS -buildVersion 18.2
+          fi
+
       - name: Build unsigned device app
         run: |
           xcodebuild \
