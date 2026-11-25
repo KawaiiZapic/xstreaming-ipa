@@ -59,11 +59,13 @@ jobs:
           app="$RUNNER_TEMP/xstreaming-build/Build/Products/Release-iphoneos/XStreaming.app"
           test -s "$app/main.jsbundle"
           test -s "$app/index.html"
-          xcrun lipo -verify_arch arm64 "$app/XStreaming"
-          if codesign -d "$app" 2>/dev/null; then
-            echo 'Expected an unsigned app'
-            exit 1
-          fi
+          xcrun lipo "$app/XStreaming" -verify_arch arm64
+          shopt -s nullglob
+          for bundle in "$app"/Frameworks/*.framework "$app"; do
+            if codesign -d "$bundle" 2>/dev/null; then
+              codesign --remove-signature "$bundle"
+            fi
+          done
           ditto ios/bundle/assets "$app/assets"
           mkdir Payload
           ditto "$app" Payload/XStreaming.app
